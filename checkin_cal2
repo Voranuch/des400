@@ -53,11 +53,32 @@ app.post('/webhook', async (req, res) => {
         // หากเจอผู้ใช้ ส่งข้อความต้อนรับ
         console.log(`User ${lineUserId} found`);
         const welcomeMessage = users.name
-          ? `Hello, ${users.name}, welcome back!`  // หากมีชื่อผู้ใช้
+          ? `Hello, ${users.name}! You are already checked-in!`  // หากมีชื่อผู้ใช้
           : 'You are already checked-in!';
 
         // ส่งข้อความกลับไปยังผู้ใช้
         await sendLineMessage(replyToken, welcomeMessage);
+        // อัปเดตคอลัมน์ checkin ให้เป็น true ในฐานข้อมูล Supabase
+
+        
+        const { data, error: updateError } = await supabase
+          .from('items')
+          .update({ checkin: true })  // อัปเดตคอลัมน์ checkin เป็น true
+          .eq('userid', lineUserId);  // ค้นหาผู้ใช้ตาม userid
+
+        if (updateError) {
+          console.log('Error updating checkin:', updateError);
+          return res.status(500).send('Error updating checkin status');
+        }
+
+        console.log(`User ${lineUserId} check-in status updated to true`);  // แจ้งว่าอัปเดตเสร็จแล้ว
+
+                  
+
+    if (event.message.text === 'action B') {
+
+          // ทำการดำเนินการสำหรับ action B ที่นี่
+    }
 
         return res.status(200).send('OK');
       } catch (err) {
@@ -66,6 +87,8 @@ app.post('/webhook', async (req, res) => {
       }
     }
   }
+
+ 
 
   res.status(200).send('OK');
 });
