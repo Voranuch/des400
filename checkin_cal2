@@ -54,7 +54,7 @@ app.post('/webhook', async (req, res) => {
         console.log(`User ${lineUserId} found`);
         const welcomeMessage = users.name
           ? `Hello, ${users.name}, welcome back!`  // หากมีชื่อผู้ใช้
-          : 'Hello, welcome back!';
+          : 'You are already checked-in!';
 
         // ส่งข้อความกลับไปยังผู้ใช้
         await sendLineMessage(replyToken, welcomeMessage);
