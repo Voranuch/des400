@@ -1,0 +1,101 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const axios = require('axios');
+require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase Client
+const supabaseUrl = 'https://leogemntailcnoftfwhk.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxlb2dlbW50YWlsY25vZnRmd2hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk0Nzk5OTIsImV4cCI6MjA0NTA1NTk5Mn0.-d-5CDH_pJvQD0yxaDBfzPTL5_OfOPF2BCBSuBZlNUw';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+const LINE_API_URL = 'https://api.line.me/v2/bot/message/reply';
+const LINE_CHANNEL_ACCESS_TOKEN = 'WlofTzTu12bMnEfYvxA7ALuCiNgYljHSygI5XgBcWtu2uhwkbJ1PX1bHp7RLvn7353Y2PTupKFETNSOinLVH71ipyYpguLo7GdtIbPY1/RsmaEFsS85uFBnmn2lFKFwHxv7X+iEocDsKB3SWcABY4AdB04t89/1O/w1cDnyilFU=';
+
+const app = express();
+app.use(bodyParser.json());
+
+// Webhook Endpoint
+app.post('/webhook', async (req, res) => {
+  const events = req.body.events;
+  console.log('Received Events:', JSON.stringify(events, null, 2));
+
+  for (const event of events) {
+    const lineUserId = event.source.userId;
+    const replyToken = event.replyToken;
+
+    console.log('LINE User ID received:', lineUserId);
+
+    if (event.type === 'postback' && event.postback.data === 'action=A') {
+      // ตรวจสอบการกด Action A
+      console.log('Postback Action: A triggered');
+
+      try {
+        // ค้นหาผู้ใช้ใน Supabase
+        const { data: users, error } = await supabase
+          .from('items')
+          .select('userid, name')
+          .eq('userid', lineUserId);
+
+        console.log('User Data from Supabase:', users);
+        console.log('Error from Supabase:', error);
+
+        if (error || !users || users.length === 0) {
+          console.log(`User ${lineUserId} not found`);
+          await sendLineMessage(replyToken, 'You are not registered. Please register first.');
+          return res.status(400).send('User not found');
+        }
+
+        // พบผู้ใช้ ส่งข้อความต้อนรับ
+        const user = users[0];
+        const welcomeMessage = user.name
+          ? `Hello, ${user.name}, welcome back!`
+          : 'Hello, welcome back!';
+
+        await sendLineMessage(replyToken, welcomeMessage);
+        return res.status(200).send('OK');
+      } catch (err) {
+        console.error('Error checking user in Supabase:', err);
+        return res.status(500).send('Internal Server Error');
+      }
+    } else {
+      console.log('Unhandled event type or action');
+      await sendLineMessage(replyToken, 'Unknown action. Please try again.');
+    }
+  }
+
+  res.status(200).send('OK');
+});
+
+// Function to send a message to LINE (reply message)
+async function sendLineMessage(replyToken, message) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+  };
+
+  const data = {
+    replyToken: replyToken,
+    messages: [
+      {
+        type: 'text',
+        text: message,
+      },
+    ],
+  };
+
+  console.log('Sending message:', message);
+
+  try {
+    const response = await axios.post(LINE_API_URL, data, { headers });
+    console.log('Message sent successfully:', response.data);
+  } catch (error) {
+    console.error('Error sending message to LINE:', error.response || error);
+  }
+}
+
+// Start the server
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
