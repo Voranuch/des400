@@ -1,0 +1,104 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const axios = require('axios');
+require('dotenv').config(); // Load environment variables from .env
+const { createClient } = require('@supabase/supabase-js'); // Import Supabase client
+
+// Initialize Supabase Client
+const supabaseUrl = 'https://leogemntailcnoftfwhk.supabase.co'; // Get Supabase URL from .env
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxlb2dlbW50YWlsY25vZnRmd2hrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk0Nzk5OTIsImV4cCI6MjA0NTA1NTk5Mn0.-d-5CDH_pJvQD0yxaDBfzPTL5_OfOPF2BCBSuBZlNUw'; // Get Supabase key from .env
+const supabase = createClient(supabaseUrl, supabaseKey); // Create Supabase client
+
+// LINE API Configuration
+const LINE_API_URL = 'https://api.line.me/v2/bot/message/reply';
+const LINE_CHANNEL_ACCESS_TOKEN = 'WlofTzTu12bMnEfYvxA7ALuCiNgYljHSygI5XgBcWtu2uhwkbJ1PX1bHp7RLvn7353Y2PTupKFETNSOinLVH71ipyYpguLo7GdtIbPY1/RsmaEFsS85uFBnmn2lFKFwHxv7X+iEocDsKB3SWcABY4AdB04t89/1O/w1cDnyilFU='; // Use the token from .env
+
+const app = express();
+app.use(bodyParser.json());
+
+// Webhook Endpoint
+app.post('/webhook', async (req, res) => {
+  const events = req.body.events;
+  console.log('Received Events:', JSON.stringify(events, null, 2)); // ตรวจสอบ event ที่ได้รับ
+
+  for (const event of events) {
+    console.log('Event Type:', event.type); // แสดงประเภทของ event
+
+    if (event.type === 'message' || event.type === 'postback') { // รองรับทั้ง message และ postback
+      const lineUserId = event.source.userId;
+      console.log('LINE User ID received:', lineUserId);
+
+      const replyToken = event.replyToken;
+      console.log(`Reply Token: ${replyToken}`);
+
+      try {
+        // ตรวจสอบข้อมูล user ใน Supabase
+        const { data: users, error } = await supabase
+        .from('items')
+        .select('userid, name, description, active')
+        .eq('userid', lineUserId)  // ตรวจสอบว่า userId ตรงกับในฐานข้อมูล
+        .eq('active', true)  // ตรวจสอบว่า active = true
+        //.single();
+      
+      console.log('User Data from Supabase:', users);  // ตรวจสอบข้อมูลที่ได้รับจาก Supabase
+      console.log('Error from Supabase:', error);  // ตรวจสอบ error
+      
+
+        if (error || !users) {
+          console.log(`User ${lineUserId} not found`);
+          await sendLineMessage(replyToken, 'You are not registered. Please register first.');
+          return res.status(400).send('User not found');
+        }
+
+        // หากเจอผู้ใช้ ส่งข้อความต้อนรับ
+        console.log(`User ${lineUserId} found`);
+        const welcomeMessage = users.name
+          ? `Hello, ${users.name}, welcome back!`  // หากมีชื่อผู้ใช้
+          : 'Hello, welcome back!';
+
+        // ส่งข้อความกลับไปยังผู้ใช้
+        await sendLineMessage(replyToken, welcomeMessage);
+
+        return res.status(200).send('OK');
+      } catch (err) {
+        console.error('Error checking user in Supabase:', err);
+        return res.status(500).send('Internal Server Error');
+      }
+    }
+  }
+
+  res.status(200).send('OK');
+});
+
+// Function to send a message to LINE (reply message)
+async function sendLineMessage(replyToken, message) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+  };
+
+  const data = {
+    replyToken: replyToken,  // ใช้ replyToken ที่ได้รับจาก postback event
+    messages: [
+      {
+        type: 'text',
+        text: message,  // ข้อความที่ต้องการส่ง
+      },
+    ],
+  };
+
+  console.log('Sending message:', message);  // แสดงข้อความที่ส่ง
+
+  try {
+    const response = await axios.post(LINE_API_URL, data, { headers });
+    console.log('Message sent successfully:', response.data); // แสดงผลลัพธ์การส่งข้อความ
+  } catch (error) {
+    console.error('Error sending message to LINE:', error.response || error);  // เพิ่มการตรวจสอบ error
+  }
+}
+
+// Start the server
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
